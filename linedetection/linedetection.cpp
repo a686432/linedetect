@@ -296,7 +296,7 @@ void AreaDetect(Mat src,int mode)
 
 			for (int j = x2; j < x1; j++)
 			for (int k = y2; k < y1; k++)
-				im_label3[j*col + k] = 255;
+				im_label3[j*col + k] = i;
 		}
 
 
@@ -317,11 +317,11 @@ void AreaDetect(Mat src,int mode)
 
 	for (int i = 0; i < row;i++)
 	for (int j = 0; j < col;j++)
-	if (im_label[i*col + j]>0)
+	if (im_label3[i*col + j]>0)
 	{
-		x[im_label[i*col + j]] += i;
-		y[im_label[i*col + j]] += j;
-		count[im_label[i*col + j]]++;
+		x[im_label3[i*col + j]] += i;
+		y[im_label3[i*col + j]] += j;
+		count[im_label3[i*col + j]]++;
 	}
 
 
@@ -331,24 +331,37 @@ void AreaDetect(Mat src,int mode)
 		{
 			x[k] = x[k] / count[k];
 			y[k] = y[k] / count[k];
-			b.at(x[k], y[k]) = 0;
+			b.at<uchar>(x[k], y[k]) = 0;
 		}
 
 	
-			
+		
 
 		
     
-/*	for (int i = 0; i < row; i++)
+	for (int i = 0; i < row; i++)
 		for (int j = 0; j < col; j++)
-		if (im_label[i*col + j] != 0)
+		if (im_label3[i*col + j] != 0)
 		{
-			u11[im_label[i*col + j]] += (i - x[im_label[i*col + j]])*(j - y[im_label[i*col + j]]);
-			u02[im_label[i*col + j]] += (j - y[im_label[i*col + j]])*(j - y[im_label[i*col + j]]);
-			u20[im_label[i*col + j]] += (i - x[im_label[i*col + j]])*(i - x[im_label[i*col + j]]);
+			u11[im_label3[i*col + j]] += (i - x[im_label3[i*col + j]])*(j - y[im_label3[i*col + j]]);
+			u02[im_label3[i*col + j]] += (j - y[im_label3[i*col + j]])*(j - y[im_label3[i*col + j]]);
+			u20[im_label3[i*col + j]] += (i - x[im_label3[i*col + j]])*(i - x[im_label3[i*col + j]]);
 		}
 
-	for (int i = 0; i < label; i++)
+	for (int i = 0; i < label; i++ )
+	if (u11[i] != 0 || u20[i] != 0 || u02[i] != 0)
+	{
+		Point p1, p2;
+		tanu[i] = tan(atan(2 * u11[i] / (double)(u20[i] - u02[i])) / 2);
+		p1.x = x[i]
+		cout << i << ":" << tanu[i]<<endl;
+
+	}
+	Point p1 = Point(1, 2), p2 = Point(600, 500);
+	line(b, p1, p2, Scalar(0, 0, 255));
+	imshow("xtes.jpg", b);
+
+/*	for (int i = 0; i < label; i++)
 		if (u11[i] != 0 && count[i]>30)
 		{
 			tanu[i] = tan(atan(2 * u11[i] / (double)(u20[i] - u02[i])) / 2);
@@ -458,7 +471,9 @@ void AreaDetect(Mat src,int mode)
 int main()
 {
 	original=imread("12.jpg", 1);
+
 	Mat original = imread("12.jpg", 0);
+
 	Mat imthreshold,imdenoisyx,imdenoisyy;
 	int blockSize = 29;
 	int constValue =45; 
