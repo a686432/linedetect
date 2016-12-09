@@ -1,12 +1,33 @@
-#include<iostream>
-#include<opencv2/opencv.hpp>
-#include<algorithm>
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <algorithm>
 #include "bmpproperty.h"
-#include<time.h>
+#include <time.h>
+#include <vector>
 using namespace std;
 using namespace cv;
-uint minwidth=5,maxwidth=90 ;
+struct myLine
+{
+	double p;
+	double alt;
+	Point point;
+	int maxx;
+	int minx;
+	int maxy;
+	int miny;
+	int count = 0;
+};
+uint minwidth=5,maxwidth=400,errorp=50 ;
 Mat original;
+bool comparel(const myLine & v1, const myLine & v2)
+{
+	return v1.point.x < v2.point.x;
+}
+bool comparev(const myLine & v1, const myLine & v2)
+{
+	return v1.point.y < v2.point.y;
+}
+
 
 void adaptiveThreshold2(InputArray _src, OutputArray _dst, double maxValue,
 	int method, int type, int blockSize, double delta)
@@ -48,7 +69,7 @@ void adaptiveThreshold2(InputArray _src, OutputArray _dst, double maxValue,
 		tab[i] = (uchar)(i - 255 > -idelta ? imaxval : 0);
 	else if (type == CV_THRESH_BINARY_INV)
 	for (i = 0; i < 768; i++)
-		tab[i] = (uchar)(i - 255 <= -idelta+45  ? imaxval : 0);
+		tab[i] = (uchar)(i - 255 <= -idelta + 45 || i - 255 >= -idelta + 115 ? imaxval : 0);
 	else
 		CV_Error(CV_StsBadFlag, "Unknown/unsupported threshold type");
 
@@ -247,8 +268,8 @@ void AreaDetect(Mat src,int mode)
 		}
 
 		for (int i = 1; i < label;i++)
-		if (maxx[i] - minx[i]<120 &&  maxy[i] - miny[i]<100)
-		if (maxx[i] - minx[i]>60 && maxy[i] - miny[i]>30)
+		if (maxx[i] - minx[i]<row/2 &&  maxy[i] - miny[i]<col/2)
+		if (maxx[i] - minx[i]>row/20 && maxy[i] - miny[i]>col/20)
 		{
 
 			int x1 = maxx[i], x2 = minx[i], y1 = maxy[i], y2 = miny[i];
@@ -303,10 +324,11 @@ void AreaDetect(Mat src,int mode)
 
 				for (int i = 0; i < row; i++)
 				for (int j = 0; j < col; j++)
-				        im_label2[i*col + j] = im_label3[i*col + j] % 256;
+				if (im_label3[i*col + j])
+					im_label2[i*col + j] = 255; else im_label2[i*col + j] = 0;
 				Mat b = Mat(row, col, CV_8UC1, (uchar*)im_label2);
-				imshow("xts.jpg", b);
-				imwrite("xts.jpg", b);
+			//	imshow("xts.jpg", b);
+			//	imwrite("xts.jpg", b);
 
 	/*第三部分找到每个区域的中心和主轴*/
          
@@ -331,14 +353,13 @@ void AreaDetect(Mat src,int mode)
 		{
 			x[k] = x[k] / count[k];
 			y[k] = y[k] / count[k];
-			b.at<uchar>(x[k], y[k]) = 0;
+			Point p=Point(y[k],x[k]) ;
+		//	circle(b, p, 2, Scalar(0, 0, 0),2);
+
 		}
+	
 
 	
-		
-
-		
-    
 	for (int i = 0; i < row; i++)
 		for (int j = 0; j < col; j++)
 		if (im_label3[i*col + j] != 0)
@@ -348,18 +369,188 @@ void AreaDetect(Mat src,int mode)
 			u20[im_label3[i*col + j]] += (i - x[im_label3[i*col + j]])*(i - x[im_label3[i*col + j]]);
 		}
 
+	vector<myLine> vec;
 	for (int i = 0; i < label; i++ )
 	if (u11[i] != 0 || u20[i] != 0 || u02[i] != 0)
 	{
-		Point p1, p2;
-		tanu[i] = tan(atan(2 * u11[i] / (double)(u20[i] - u02[i])) / 2);
-		p1.x = x[i]
-		cout << i << ":" << tanu[i]<<endl;
+		alt[i] = atan(2 * u11[i] / (double)(u20[i] - u02[i])) / 2;
+		//Point p1, p2;
+		//p1.x = y[i] + 50*cos(alt[i]);
+		//p1.y = x[i] + 50*sin(alt[i]);
+		//p2.x = y[i] - 50*cos(alt[i]);
+		//p2.y = x[i] - 50*sin(alt[i]);
+		p[i] = (y[i] * sin(alt[i]) + x[i] * cos(alt[i]));
+		cout << i << ":" << p[i] << " " << alt[i] << endl;
+		vector<myLine>::iterator j = vec.begin();
+		int flag = 0;
+		for (; j != vec.end();j++)
+		if (abs((*j).p - p[i]) < errorp && abs((*j).alt - alt[i])<0.5)
+		  {
+			   (*j).p = ((*j).p*(*j).count + p[i]) / ((*j).count + 1);
+			   (*j).alt = ((*j).alt*(*j).count + alt[i]) / ((*j).count + 1);
+			   (*j).point.x = ((*j).point.x*(*j).count + x[i]) / ((*j).count + 1);
+			   (*j).point.y = ((*j).point.y*(*j).count + y[i]) / ((*j).count + 1);
+			   (*j).maxx = max((*j).maxx,(int)maxx[i]);
+			   (*j).minx = min((*j).minx,(int)minx[i]);
+			   (*j).maxy = max((*j).maxy, (int)maxy[i]);
+			   (*j).miny = min((*j).miny, (int)miny[i]);
+			   (*j).count++;
+			   flag = 1;
+			   break;
+		  }
+		   if (!flag)
+		{
+			myLine m;
+			m.p = p[i];
+			m.alt = alt[i];
+			m.point.x = x[i];
+			m.point.y = y[i];
+			m.maxx = maxx[i];
+			m.minx = minx[i];
+			m.maxy = maxy[i];
+			m.miny = miny[i];
+			m.count = 1;
+		//	cout << "OK" << m.point.x<<" " << m.point.y<<endl;
+			vec.push_back(m);
+		}
 
+
+	//	line(b, p1, p2, Scalar(127, 127, 127));
+		p[i] = (y[i] * cos(alt[i]) + x[i] * sin(alt[i]));
+		alt[i] = alt[i] + CV_PI / 2;
+
+
+		j = vec.begin();
+		flag = 0;
+		for (; j != vec.end(); j++)
+		if (abs((*j).p - p[i]) < errorp && abs((*j).alt - alt[i])<0.5)
+		{
+			(*j).p = ((*j).p*(*j).count + p[i]) / ((*j).count + 1);
+			(*j).alt = ((*j).alt*(*j).count + alt[i]) / ((*j).count + 1);
+			(*j).point.x = ((*j).point.x*(*j).count + x[i]) / ((*j).count + 1);
+			(*j).point.y = ((*j).point.y*(*j).count + y[i]) / ((*j).count + 1);
+			(*j).maxx = max((*j).maxx, (int)maxx[i]);
+			(*j).minx = min((*j).minx, (int)minx[i]);
+			(*j).maxy = max((*j).maxy, (int)maxy[i]);
+			(*j).miny = min((*j).miny, (int)miny[i]);
+			(*j).count++;
+			flag = 1;
+			break;
+		}
+		if (!flag)
+		{
+			myLine m;
+			m.p = p[i];
+			m.alt = alt[i];
+			m.point.x = x[i];
+			m.point.y = y[i];
+			m.maxx = maxx[i];
+			m.minx = minx[i];
+			m.maxy = maxy[i];
+			m.miny = miny[i];
+			m.count = 1;
+	//		cout << "OK" << m.point.x << " " << m.point.y << endl;
+			vec.push_back(m);
+		}
+
+		//p1.x = y[i] + 50 * cos(alt[i]);
+		//p1.y = x[i] + 50 * sin(alt[i]);
+		//p2.x = y[i] - 50 * cos(alt[i]);
+		//p2.y = x[i] - 50 * sin(alt[i]);
+		//line(b, p1, p2, Scalar(127, 127, 127));
+
+		
+
+	
 	}
-	Point p1 = Point(1, 2), p2 = Point(600, 500);
-	line(b, p1, p2, Scalar(0, 0, 255));
-	imshow("xtes.jpg", b);
+	for (vector<myLine>::iterator j = vec.begin(); j != vec.end(); j++)
+	{
+		Point p1, p2;
+		p1.x = (*j).point.y + 500 * cos((*j).alt);
+		p1.y = (*j).point.x + 500 * sin((*j).alt);
+		p2.x = (*j).point.y - 500 * cos((*j).alt);
+		p2.y = (*j).point.x - 500 * sin((*j).alt);
+		//line(b, p1, p2, Scalar(127, 127, 127),2);
+	}
+//	imshow("xts2.jpg", b);
+//	imwrite("xts2.jpg", b);
+
+	vector<vector<myLine>> vline;
+	for (vector<myLine>::iterator j = vec.begin(); j != vec.end(); j++)
+	{
+		
+		int flag = 0;
+		for (vector<vector<myLine>>::iterator k = vline.begin(); k != vline.end(); k++)
+		{
+			vector<myLine>::iterator l = (*k).begin();
+			if (abs((*l).alt - (*j).alt) < 0.1)
+			{
+				(*k).push_back(*j);
+				flag = 1;
+			}
+		}
+		if (!flag)
+		{
+			vector<myLine> l;
+			l.push_back(*j);
+			vline.push_back(l);
+		//	cout << "lk" << endl;
+		}
+	}
+	
+	for (vector<vector<myLine>>::iterator k = vline.begin(); k != vline.end(); k++)
+	{
+		sort((*k).begin(), (*k).end(), comparel);
+		for (vector<myLine>::iterator l = (*k).begin(); l!= (*k).end(); l++)
+		//	cout << ',' << (*l).point.x;
+		cout << endl;
+	}
+	vector<myLine>::iterator it = (*(vline.begin())).begin();
+	it++;
+	for (; it != (*vline.begin()).end(); it++)
+	{
+		vector<myLine>::iterator l = --it;
+		it++;
+		Point p1, p2;
+		p1.x = ((*it).point.y + (*l).point.y) / 2 + 700 * cos(((*it).alt + (*l).alt) / 2);
+		p1.y = ((*it).point.x + (*l).point.x) / 2 + 700 * sin(((*it).alt + (*l).alt) / 2);
+		p2.x = ((*it).point.y + (*l).point.y) / 2 - 700 * cos(((*it).alt + (*l).alt) / 2);
+		p2.y = ((*it).point.x + (*l).point.x) / 2 - 700 * sin(((*it).alt + (*l).alt) / 2);
+		line(b, p1, p2, Scalar(127, 127, 127),2);
+		line(original, p1, p2, Scalar(0, 0, 255),3);
+	}
+	
+
+	for (vector<vector<myLine>>::iterator k = vline.begin(); k != vline.end(); k++)
+	{
+		sort((*k).begin(), (*k).end(), comparev);
+		for (vector<myLine>::iterator l = (*k).begin(); l != (*k).end(); l++)
+	//		cout << ',' << (*l).point.y;
+		cout << endl;
+	}
+	it = (*(++vline.begin())).begin();
+	it++;
+	for (; it != (*(++vline.begin())).end(); it++)
+	{
+		vector<myLine>::iterator l = --it;
+		it++;
+		Point p1, p2;
+		p1.x = ((*it).point.y + (*l).point.y) / 2 + 700 * cos(((*it).alt + (*l).alt) / 2);
+		p1.y = ((*it).point.x + (*l).point.x) / 2 + 700 * sin(((*it).alt + (*l).alt) / 2);
+		p2.x = ((*it).point.y + (*l).point.y) / 2 - 700 * cos(((*it).alt + (*l).alt) / 2);
+		p2.y = ((*it).point.x + (*l).point.x) / 2 - 700 * sin(((*it).alt + (*l).alt) / 2);
+		line(b, p1, p2, Scalar(127, 127, 127),2);
+		line(original, p1, p2, Scalar(0, 0, 255),3);
+	}
+
+
+
+	//Point p1 = Point(1, 2), p2 = Point(600, 500);
+	//line(b, p1, p2, Scalar(0, 0, 255));
+	//imshow("xtes.jpg", b);
+	//imwrite("xtes.jpg", b);
+	//imshow("result.jpg", original);
+	imwrite("result.jpg", original);
 
 /*	for (int i = 0; i < label; i++)
 		if (u11[i] != 0 && count[i]>30)
@@ -470,33 +661,35 @@ void AreaDetect(Mat src,int mode)
 }
 int main()
 {
-	original=imread("12.jpg", 1);
-
-	Mat original = imread("12.jpg", 0);
-
+	original=imread("29.jpg", 1);
+	Mat original = imread("29.jpg", 0);
 	Mat imthreshold,imdenoisyx,imdenoisyy;
-	int blockSize = 29;
+	int blockSize =99;
 	int constValue =45; 
-	Mat local;
-	adaptiveThreshold2(original, imthreshold, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY_INV, blockSize, constValue);
-	imwrite("2.bmp", imthreshold);
+	//Mat local;
+	adaptiveThreshold2(original, imthreshold, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, blockSize, constValue);
+	//
+	clock_t start,finish;
+	start = clock();
+	//imshow("Threshold.bmp", imthreshold);
 	denoisy(imthreshold,&imdenoisyx);
 	denoisy(imdenoisyx, &imdenoisyx);
-	imshow("close2.jpg", imdenoisyx);
-	
+	//imshow("afterdn.jpg", imdenoisyx);
 	denoisy(imthreshold, &imdenoisyy);
-	imshow("close3.jpg", imdenoisyy);
+	//imshow("close3.jpg", imdenoisyy);
 	//morphologyEx(imthreshold, imthreshold, MORPH_CLOSE, Mat(5, 5, CV_8U), Point(-1, -1), 1);
 	//morphologyEx(imdenoisyx, imdenoisyx, MORPH_OPEN, Mat(5, 5, CV_8U), Point(-1, -1), 1);
-	morphologyEx(imdenoisyx, imdenoisyx, MORPH_CLOSE, Mat(9, 9, CV_8U), Point(-1, -1), 1);
+	morphologyEx(imdenoisyx, imdenoisyx, MORPH_CLOSE, Mat(1,1, CV_8U), Point(-1, -1), 1);
 	//morphologyEx(imdenoisyx, imdenoisyx, MORPH_CLOSE, Mat(5, 5, CV_8U), Point(-1, -1), 1);
-	imwrite("close.jpg", imdenoisyx);
+	//imshow("close.jpg", imdenoisyx);
 	AreaDetect(imdenoisyx, 0);
+	finish = clock();
+	double k = (double)(start - finish);
+	cout << "clock" << k << endl;;
 	//imwrite("1.bmp", imdenoisyx);
 	//denoisy(imthreshold, &imdenoisyy,1);
 	//imwrite("0.bmp", imdenoisyy);
 	//double startTime=clock();
-	
 	//AreaDetect(imdenoisyy,1);
 	//double endTime = clock();
 	//cout <<endTime-startTime << "ms" << endl;
